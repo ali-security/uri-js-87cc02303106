@@ -115,7 +115,12 @@ export function pctDecChars(str:string):string {
 		else if (c >= 194 && c < 224) {
 			if ((il - i) >= 6) {
 				const c2 = parseInt(str.substr(i + 4, 2), 16);
-				newStr += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+				//leave the sequence encoded unless the continuation byte is valid
+				if ((c2 & 192) === 128) {
+					newStr += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+				} else {
+					newStr += str.substr(i, 6);
+				}
 			} else {
 				newStr += str.substr(i, 6);
 			}
@@ -125,7 +130,14 @@ export function pctDecChars(str:string):string {
 			if ((il - i) >= 9) {
 				const c2 = parseInt(str.substr(i + 4, 2), 16);
 				const c3 = parseInt(str.substr(i + 7, 2), 16);
-				newStr += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+				const cp = ((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63);
+				//leave the sequence encoded if it is not a valid 3-byte UTF-8 sequence:
+				//4-byte lead, bad continuation bytes, overlong form or surrogate
+				if (c < 240 && (c2 & 192) === 128 && (c3 & 192) === 128 && cp >= 2048 && (cp < 55296 || cp > 57343)) {
+					newStr += String.fromCharCode(cp);
+				} else {
+					newStr += str.substr(i, 9);
+				}
 			} else {
 				newStr += str.substr(i, 9);
 			}
@@ -143,7 +155,8 @@ export function pctDecChars(str:string):string {
 function _normalizeComponentEncoding(components:URIComponents, protocol:URIRegExps) {
 	function decodeUnreserved(str:string):string {
 		const decStr = pctDecChars(str);
-		return (!decStr.match(protocol.UNRESERVED) ? str : decStr);
+		//a valid sequence decodes to exactly one character; anything else stays encoded
+		return (decStr.length !== 1 || !decStr.match(protocol.UNRESERVED) ? str : decStr);
 	}
 
 	if (components.scheme) components.scheme = String(components.scheme).replace(protocol.PCT_ENCODED, decodeUnreserved).toLowerCase().replace(protocol.NOT_SCHEME, "");

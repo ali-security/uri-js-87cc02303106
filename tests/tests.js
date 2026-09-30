@@ -439,6 +439,41 @@ test("Unescape Component", function () {
 	strictEqual(URI.unescapeComponent(encodeURIComponent("\u30a2")), "\u30a2");
 });
 
+test("Unescape Component rejects invalid UTF-8", function () {
+	strictEqual(URI.unescapeComponent(encodeURIComponent("\uffff")), "\uffff");
+	strictEqual(URI.unescapeComponent("%ED%9F%BF"), "\ud7ff");
+	strictEqual(URI.unescapeComponent("%EE%80%80"), "\ue000");
+
+	//overlong 3-byte forms of ASCII metacharacters
+	strictEqual(URI.unescapeComponent("%E0%80%AF"), "%E0%80%AF");
+	strictEqual(URI.unescapeComponent("%E0%80%AE"), "%E0%80%AE");
+	strictEqual(URI.unescapeComponent("%E0%80%8D%E0%80%8A"), "%E0%80%8D%E0%80%8A");
+	strictEqual(URI.unescapeComponent("/a%E0%80%AF..%E0%80%AFetc"), "/a%E0%80%AF..%E0%80%AFetc");
+	strictEqual(URI.unescapeComponent("%E0%9F%BF"), "%E0%9F%BF");
+	//overlong 2-byte forms
+	strictEqual(URI.unescapeComponent("%C0%AF"), "%C0%AF");
+	strictEqual(URI.unescapeComponent("%C1%9C"), "%C1%9C");
+	//invalid continuation bytes
+	strictEqual(URI.unescapeComponent("%E0%41%2F"), "%E0%41%2F");
+	strictEqual(URI.unescapeComponent("%C3%2F"), "%C3%2F");
+	strictEqual(URI.unescapeComponent("%E3%82%2F"), "%E3%82%2F");
+	//4-byte lead bytes are not decoded as 3-byte sequences
+	strictEqual(URI.unescapeComponent("%F0%80%AF"), "%F0%80%AF");
+	//UTF-16 surrogates
+	strictEqual(URI.unescapeComponent("%ED%A0%80"), "%ED%A0%80");
+});
+
+test("Normalizing does not decode invalid UTF-8 into reserved characters", function () {
+	strictEqual(URI.normalize("http://example.com/a/%E0%80%AE%E0%80%AE/etc"), "http://example.com/a/%E0%80%AE%E0%80%AE/etc");
+	strictEqual(URI.serialize(URI.parse("http://example.com/a/%E0%80%AE%E0%80%AE/etc"), { absolutePath : true }), "http://example.com/a/%E0%80%AE%E0%80%AE/etc");
+	strictEqual(URI.equal("http://example.com/a/%E0%80%AE%E0%80%AE/x", "http://example.com/x"), false);
+	strictEqual(URI.normalize("http://example.com/a%80%2Fb"), "http://example.com/a%80%2Fb");
+	strictEqual(URI.normalize("http://example.com/a%C0%2Fb"), "http://example.com/a%C0%2Fb");
+	strictEqual(URI.normalize("http://example.com/a%E0%80%AFb%E0%80%8D%E0%80%8A"), "http://example.com/a%E0%80%AFb%E0%80%8D%E0%80%8A");
+	strictEqual(URI.normalize("http://example.com/%E3%82%A2", IRI_OPTION), "http://example.com/\u30a2");
+	strictEqual(URI.normalize("http://example.com/%7E%41"), "http://example.com/~A");
+});
+
 //
 // IRI
 //
